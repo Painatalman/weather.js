@@ -1,7 +1,8 @@
 const yargs = require('yargs')
+const axios = require('axios')
 
-const geocodeAddress = require('./geocode/geocode')
-const getWeather = require('./weather/weather')
+const { googleAPIURL } = require('./geocodeConfig')
+
 
 const argv = yargs
   .options({
@@ -16,13 +17,29 @@ const argv = yargs
   .alias('help', 'h')
   .argv
 
-geocodeAddress(argv.a)
-  .then((coordinates) => {
-    const { latitude, longitude } = coordinates
-    return getWeather(latitude, longitude)
-  })
-  .then((weatherData) =>{
-    console.log(weatherData)
-  })
-  .catch(e => {throw new Error(e)})
+axios.get(
+  `${googleAPIURL}?address=${encodeURIComponent(argv.a)}`
+).then( geocodeData => {
+  if (geocodeData.status === 'ZERO_RESULTS') {
+    throw new Error('Unable to find address')
+  }
 
+  if (geocodeData.data.error_message) {
+    throw new Error(`Error with google API: ${geocodeData.data.error_message}`)
+  }
+
+  const {
+    lat: latitude,
+    lng: longitude
+  } = geocodeData.data.results[0].geometry.location
+
+  const { openWeatherAPIKey, openWeatherURL } = require('./weatherConfig')
+
+  return axios.get(
+    `${openWeatherURL}?appid=${openWeatherAPIKey}&lat=${latitude}&lon=${longitude}`
+  )
+}).then((weatherData) => {
+  console.log(weatherData.data.main)
+}).catch(e => { 
+  throw new Error(e) 
+})
